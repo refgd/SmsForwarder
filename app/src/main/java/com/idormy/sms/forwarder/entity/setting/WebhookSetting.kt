@@ -5,6 +5,7 @@ import java.io.Serializable
 import java.net.Proxy
 
 data class WebhookSetting(
+    val safetyMeasure: Int = 0,
     val method: String = "POST",
     var webServer: String = "",
     val secret: String = "",

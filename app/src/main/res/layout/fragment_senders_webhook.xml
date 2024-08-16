@@ -140,6 +140,83 @@
                 style="@style/BarStyle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:paddingEnd="10dp"
+                tools:ignore="RtlSymmetry">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/safety_measures"
+                        android:textStyle="bold" />
+
+                </LinearLayout>
+
+                <RadioGroup
+                    android:id="@+id/rg_safety_measures"
+                    style="@style/rg_style"
+                    android:orientation="horizontal">
+
+                    <RadioButton
+                        android:id="@+id/rb_safety_measures_none"
+                        style="@style/rg_rb_style"
+                        android:checked="true"
+                        android:text="@string/safety_measures_none" />
+
+                    <RadioButton
+                        android:id="@+id/rb_safety_measures_sign"
+                        style="@style/rg_rb_style"
+                        android:text="@string/safety_measures_sign" />
+
+                    <RadioButton
+                        android:id="@+id/rb_safety_measures_rsa"
+                        style="@style/rg_rb_style"
+                        android:text="@string/safety_measures_rsa" />
+
+                    <RadioButton
+                        android:id="@+id/rb_safety_measures_sm4"
+                        style="@style/rg_rb_style"
+                        android:text="@string/safety_measures_sm4" />
+
+                </RadioGroup>
+
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/layout_sign_key"
+                style="@style/BarStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                tools:ignore="RtlSymmetry">
+
+                <TextView
+                    android:id="@+id/tv_sign_key"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/sign_key"
+                    android:textStyle="bold" />
+
+                <com.xuexiang.xui.widget.edittext.materialedittext.MaterialEditText
+                    android:id="@+id/et_sign_key"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="5dp"
+                    android:layout_weight="1"
+                    android:singleLine="true"
+                    app:met_passWordButton="true" />
+
+            </LinearLayout>
+
+            <LinearLayout
+                style="@style/BarStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
                 android:orientation="vertical">
 
                 <TextView
@@ -166,29 +243,6 @@
                     android:minLines="3"
                     android:text=""
                     tools:ignore="RtlHardcoded,SpeakableTextPresentCheck" />
-
-            </LinearLayout>
-
-            <LinearLayout
-                style="@style/BarStyle"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical">
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/webhook_secret"
-                    android:textStyle="bold" />
-
-                <com.xuexiang.xui.widget.edittext.materialedittext.MaterialEditText
-                    android:id="@+id/et_Secret"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="@string/optional"
-                    android:singleLine="true"
-                    app:met_passWordButton="true"
-                    tools:ignore="TextContrastCheck,TouchTargetSizeCheck" />
 
             </LinearLayout>
 

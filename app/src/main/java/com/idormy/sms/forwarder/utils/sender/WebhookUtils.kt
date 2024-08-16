@@ -1,6 +1,5 @@
 package com.idormy.sms.forwarder.utils.sender
 
-import android.annotation.SuppressLint
 import android.text.TextUtils
 import android.util.Base64
 import com.google.gson.Gson
@@ -8,8 +7,9 @@ import com.idormy.sms.forwarder.R
 import com.idormy.sms.forwarder.database.entity.Rule
 import com.idormy.sms.forwarder.entity.MsgInfo
 import com.idormy.sms.forwarder.entity.setting.WebhookSetting
-import com.idormy.sms.forwarder.utils.AppUtils
 import com.idormy.sms.forwarder.utils.Log
+import com.idormy.sms.forwarder.utils.RSACrypt
+import com.idormy.sms.forwarder.utils.SM4Crypt
 import com.idormy.sms.forwarder.utils.SendUtils
 import com.idormy.sms.forwarder.utils.SettingUtils
 import com.idormy.sms.forwarder.utils.interceptor.BasicAuthInterceptor
@@ -18,8 +18,9 @@ import com.idormy.sms.forwarder.utils.interceptor.NoContentInterceptor
 import com.xuexiang.xhttp2.XHttp
 import com.xuexiang.xhttp2.callback.SimpleCallBack
 import com.xuexiang.xhttp2.exception.ApiException
+import com.xuexiang.xutil.data.ConvertTools
 import com.xuexiang.xutil.net.NetworkUtils
-import com.xuexiang.xutil.resource.ResUtils
+import com.xuexiang.xutil.resource.ResUtils.getString
 import okhttp3.Credentials
 import okhttp3.Response
 import okhttp3.Route
@@ -29,8 +30,6 @@ import java.net.PasswordAuthentication
 import java.net.Proxy
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
-import java.text.SimpleDateFormat
-import java.util.Date
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
@@ -59,26 +58,6 @@ class WebhookUtils {
             Log.i(TAG, "requestUrl:$requestUrl")
 
             val timestamp = System.currentTimeMillis()
-            val orgContent: String = msgInfo.content
-            val deviceMark: String = SettingUtils.extraDeviceMark
-            val appVersion: String = AppUtils.getAppVersionName()
-            val simInfo: String = msgInfo.simInfo
-            val receiveTimeTag = Regex("\\[receive_time(:(.*?))?]")
-
-            var sign = ""
-            if (!TextUtils.isEmpty(setting.secret)) {
-                val stringToSign = "$timestamp\n" + setting.secret
-                val mac = Mac.getInstance("HmacSHA256")
-                mac.init(
-                    SecretKeySpec(
-                        setting.secret.toByteArray(StandardCharsets.UTF_8),
-                        "HmacSHA256"
-                    )
-                )
-                val signData = mac.doFinal(stringToSign.toByteArray(StandardCharsets.UTF_8))
-                sign = URLEncoder.encode(String(Base64.encode(signData, Base64.NO_WRAP)), "UTF-8")
-            }
-
             var webParams = setting.webParams.trim()
 
             //支持HTTP基本认证(Basic Authentication)
@@ -93,6 +72,8 @@ class WebhookUtils {
 
             //通过`Content-Type=applicaton/json`指定请求体为`json`格式
             var isJson = false
+            val isEncrypt = (setting.safetyMeasure > 1 && !TextUtils.isEmpty(setting.secret))
+
             for ((key, value) in setting.headers.entries) {
                 if (key.equals("Content-Type", ignoreCase = true) && value.contains("application/json")) {
                     isJson = true
@@ -100,37 +81,78 @@ class WebhookUtils {
                 }
             }
 
-            val request = if (setting.method == "GET" && TextUtils.isEmpty(webParams)) {
-                setting.webServer += (if (setting.webServer.contains("?")) "&" else "?") + "from=" + URLEncoder.encode(
-                    from,
-                    "UTF-8"
-                )
-                requestUrl += "&content=" + URLEncoder.encode(content, "UTF-8")
-                if (!TextUtils.isEmpty(sign)) {
-                    requestUrl += "&timestamp=$timestamp"
-                    requestUrl += "&sign=$sign"
-                }
-                Log.d(TAG, "method = GET, Url = $requestUrl")
-                XHttp.get(requestUrl).keepJson(true)
-            } else if (setting.method == "GET" && !TextUtils.isEmpty(webParams)) {
-                webParams = msgInfo.replaceTemplate(webParams, "", "URLEncoder")
-                webParams = webParams.replace("[from]", URLEncoder.encode(from, "UTF-8"))
-                    .replace("[content]", URLEncoder.encode(content, "UTF-8"))
-                    .replace("[msg]", URLEncoder.encode(content, "UTF-8"))
-                    .replace("[org_content]", URLEncoder.encode(orgContent, "UTF-8"))
-                    .replace("[device_mark]", URLEncoder.encode(deviceMark, "UTF-8"))
-                    .replace("[app_version]", URLEncoder.encode(appVersion, "UTF-8"))
-                    .replace("[title]", URLEncoder.encode(simInfo, "UTF-8"))
-                    .replace("[card_slot]", URLEncoder.encode(simInfo, "UTF-8"))
-                    .replace(receiveTimeTag) {
-                        val format = it.groups[2]?.value
-                        URLEncoder.encode(formatDateTime(msgInfo.date, format), "UTF-8")
+            if (TextUtils.isEmpty(webParams)) {
+                webParams = "from=" + getString(R.string.tag_from) + "&content=" + getString(R.string.tag_msg)
+            }else if(webParams.startsWith("{")){
+                isJson = true
+            }
+
+            var sign = ""
+            if (setting.safetyMeasure > 0 && !TextUtils.isEmpty(setting.secret)) {
+                if (setting.safetyMeasure == 1) { // sign
+                    val stringToSign = "$from\n$content\n$timestamp\n" + setting.secret
+                    val mac = Mac.getInstance("HmacSHA256")
+                    mac.init(
+                        SecretKeySpec(
+                            setting.secret.toByteArray(StandardCharsets.UTF_8),
+                            "HmacSHA256"
+                        )
+                    )
+                    val signData = mac.doFinal(stringToSign.toByteArray(StandardCharsets.UTF_8))
+                    sign = URLEncoder.encode(String(Base64.encode(signData, Base64.NO_WRAP)), "UTF-8")
+
+                    if (isJson) {
+                        webParams = "{\"data\": $webParams, \"timestamp\":\"{{timestamp}}\", \"sign\":\"{{sign}}\"}"
+                    }else{
+                        webParams += "&timestamp={{timestamp}}&sign={{sign}}"
                     }
-                    .replace("\n", "%0A")
-                if (!TextUtils.isEmpty(setting.secret)) {
-                    webParams = webParams.replace("[timestamp]", timestamp.toString())
-                        .replace("[sign]", URLEncoder.encode(sign, "UTF-8"))
+                } else {
+                    var parameters = ""
+                    if(isEncrypt && !isJson){
+                        webParams.trim('&').split("&").forEach {
+                            val sepIndex = it.indexOf("=")
+                            if (sepIndex != -1) {
+                                val key = it.substring(0, sepIndex).trim()
+                                val value = it.substring(sepIndex + 1).trim()
+                                parameters += "\"$key\": \"$value\","
+                            }
+                        }
+
+                        parameters = "{"+parameters.trim(',')+"}"
+                    }else{
+                        parameters = webParams
+                    }
+                    parameters = msgInfo.replaceTemplate(parameters, "", "Gson")
+
+                    if (setting.safetyMeasure == 2) {
+                        val publicKey = RSACrypt.getPublicKey(setting.secret)
+                        sign = com.idormy.sms.forwarder.utils.Base64.encode(parameters.toByteArray())
+                        sign = RSACrypt.encryptByPublicKey(sign, publicKey)
+                    } else if (setting.safetyMeasure == 3) {
+                        val sm4Key = ConvertTools.hexStringToByteArray(setting.secret)
+                        val encryptCBC = SM4Crypt.encrypt(parameters.toByteArray(), sm4Key)
+                        sign = com.idormy.sms.forwarder.utils.Base64.encode(encryptCBC)
+                    }
+
+                    if (isJson) {
+                        webParams = "{\"data\":\"{{sign}}\",\"timestamp\":\"{{timestamp}}\"}"
+                    }else{
+                        webParams = "data={{sign}}&timestamp={{timestamp}}"
+                    }
                 }
+            }
+
+            val request = if (setting.method == "GET") {
+                webParams = msgInfo.replaceTemplate(webParams, "", "URLEncoder")
+                                .replace("\n", "%0A")
+                                .replace("{{timestamp}}", timestamp.toString())
+
+                webParams = if (isJson) {
+                    webParams.replace("{{sign}}", escapeJson(sign))
+                } else {
+                    webParams.replace("{{sign}}", URLEncoder.encode(sign, "UTF-8"))
+                }
+
                 requestUrl += if (webParams.startsWith("/")) {
                     webParams
                 } else {
@@ -138,59 +160,33 @@ class WebhookUtils {
                 }
                 Log.d(TAG, "method = GET, Url = $requestUrl")
                 XHttp.get(requestUrl).keepJson(true)
-            } else if (webParams.isNotEmpty() && (isJson || webParams.startsWith("{"))) {
-                webParams = msgInfo.replaceTemplate(webParams, "", "Gson")
-                val bodyMsg = webParams.replace("[from]", from)
-                    .replace("[content]", escapeJson(content))
-                    .replace("[msg]", escapeJson(content))
-                    .replace("[org_content]", escapeJson(orgContent))
-                    .replace("[device_mark]", escapeJson(deviceMark))
-                    .replace("[app_version]", appVersion)
-                    .replace("[title]", escapeJson(simInfo))
-                    .replace("[card_slot]", escapeJson(simInfo))
-                    .replace(receiveTimeTag) {
-                        val format = it.groups[2]?.value
-                        formatDateTime(msgInfo.date, format)
-                    }
-                    .replace("[timestamp]", timestamp.toString())
-                    .replace("[sign]", sign)
-                Log.d(TAG, "method = ${setting.method}, Url = $requestUrl, bodyMsg = $bodyMsg")
+            } else if(isJson) {
+                webParams = msgInfo.replaceTemplate(webParams, "", "URLEncoder")
+                                .replace("{{timestamp}}", timestamp.toString())
+                                .replace("{{sign}}", escapeJson(sign))
+
+                Log.d(TAG, "method = ${setting.method}_json, Url = $requestUrl, bodyMsg = $webParams")
                 when (setting.method) {
-                    "PUT" -> XHttp.put(requestUrl).keepJson(true).upJson(bodyMsg)
-                    "PATCH" -> XHttp.patch(requestUrl).keepJson(true).upJson(bodyMsg)
-                    else -> XHttp.post(requestUrl).keepJson(true).upJson(bodyMsg)
+                    "PUT" -> XHttp.put(requestUrl).keepJson(true).upJson(webParams)
+                    "PATCH" -> XHttp.patch(requestUrl).keepJson(true).upJson(webParams)
+                    else -> XHttp.post(requestUrl).keepJson(true).upJson(webParams)
                 }
             } else {
-                if (webParams.isEmpty()) {
-                    webParams = "from=[from]&content=[content]&timestamp=[timestamp]"
-                    if (!TextUtils.isEmpty(sign)) webParams += "&sign=[sign]"
-                }
-                Log.d(TAG, "method = ${setting.method}, Url = $requestUrl")
+                Log.d(TAG, "method = ${setting.method}, Url = $requestUrl, bodyMsg = $webParams")
                 val postRequest = when (setting.method) {
                     "PUT" -> XHttp.put(requestUrl).keepJson(true)
                     "PATCH" -> XHttp.patch(requestUrl).keepJson(true)
                     else -> XHttp.post(requestUrl).keepJson(true)
                 }
-                webParams = msgInfo.replaceTemplate(webParams)
+
                 webParams.trim('&').split("&").forEach {
                     val sepIndex = it.indexOf("=")
                     if (sepIndex != -1) {
                         val key = it.substring(0, sepIndex).trim()
                         val value = it.substring(sepIndex + 1).trim()
-                        postRequest.params(key, value.replace("[from]", from)
-                            .replace("[content]", content)
-                            .replace("[msg]", content)
-                            .replace("[org_content]", orgContent)
-                            .replace("[device_mark]", deviceMark)
-                            .replace("[app_version]", appVersion)
-                            .replace("[title]", simInfo)
-                            .replace("[card_slot]", simInfo)
-                            .replace(receiveTimeTag) { t ->
-                                val format = t.groups[2]?.value
-                                formatDateTime(msgInfo.date, format)
-                            }
-                            .replace("[timestamp]", timestamp.toString())
-                            .replace("[sign]", sign)
+                        postRequest.params(key, msgInfo.replaceTemplate(value)
+                            .replace("{{timestamp}}", timestamp.toString())
+                            .replace("{{sign}}", sign)
                         )
                     }
                 }
@@ -215,7 +211,7 @@ class WebhookUtils {
                 Log.d(TAG, "proxyHost = ${setting.proxyHost}, proxyPort = ${setting.proxyPort}")
                 val proxyHost = if (NetworkUtils.isIP(setting.proxyHost)) setting.proxyHost else NetworkUtils.getDomainAddress(setting.proxyHost)
                 if (!NetworkUtils.isIP(proxyHost)) {
-                    throw Exception(String.format(ResUtils.getString(R.string.invalid_proxy_host), proxyHost))
+                    throw Exception(String.format(getString(R.string.invalid_proxy_host), proxyHost))
                 }
                 val proxyPort: Int = setting.proxyPort.toInt()
 
@@ -276,16 +272,9 @@ class WebhookUtils {
         //JSON需要转义的字符
         private fun escapeJson(str: String?): String {
             if (str == null) return "null"
+            if (str == "") return ""
             val jsonStr: String = Gson().toJson(str)
             return if (jsonStr.length >= 2) jsonStr.substring(1, jsonStr.length - 1) else jsonStr
         }
-
-        @SuppressLint("SimpleDateFormat")
-        fun formatDateTime(currentTime: Date, format: String?): String {
-            val actualFormat = format?.removePrefix(":") ?: "yyyy-MM-dd HH:mm:ss"
-            val dateFormat = SimpleDateFormat(actualFormat)
-            return dateFormat.format(currentTime)
-        }
-
     }
 }

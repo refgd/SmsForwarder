@@ -128,10 +128,13 @@ class WebhookFragment : BaseFragment<FragmentSendersWebhookBinding?>(), View.OnC
                 binding!!.sbEnable.isChecked = sender.status == 1
                 val settingVo = Gson().fromJson(sender.jsonSetting, WebhookSetting::class.java)
                 Log.d(TAG, settingVo.toString())
+
+                var safetyMeasures = 0
                 if (settingVo != null) {
+                    safetyMeasures = settingVo.safetyMeasure
                     binding!!.rgMethod.check(settingVo.getMethodCheckId())
                     binding!!.etWebServer.setText(settingVo.webServer)
-                    binding!!.etSecret.setText(settingVo.secret)
+                    binding!!.etSignKey.setText(settingVo.secret)
                     binding!!.etResponse.setText(settingVo.response)
                     binding!!.etWebParams.setText(settingVo.webParams)
                     //set header
@@ -147,11 +150,56 @@ class WebhookFragment : BaseFragment<FragmentSendersWebhookBinding?>(), View.OnC
                     binding!!.etProxyUsername.setText(settingVo.proxyUsername)
                     binding!!.etProxyPassword.setText(settingVo.proxyPassword)
                 }
+
+                //安全措施
+                var safetyMeasuresId = R.id.rb_safety_measures_none
+                when (safetyMeasures) {
+                    1 -> {
+                        safetyMeasuresId = R.id.rb_safety_measures_sign
+                        binding!!.tvSignKey.text = getString(R.string.sign_key)
+                    }
+
+                    2 -> {
+                        safetyMeasuresId = R.id.rb_safety_measures_rsa
+                        binding!!.tvSignKey.text = getString(R.string.public_key)
+                    }
+
+                    3 -> {
+                        safetyMeasuresId = R.id.rb_safety_measures_sm4
+                        binding!!.tvSignKey.text = getString(R.string.sm4_key)
+                    }
+
+                    else -> {
+                        binding!!.layoutSignKey.visibility = View.GONE
+                    }
+                }
+                binding!!.rgSafetyMeasures.check(safetyMeasuresId)
             }
         })
     }
 
     override fun initListeners() {
+        binding!!.rgSafetyMeasures.setOnCheckedChangeListener { _: RadioGroup?, checkedId: Int ->
+            binding!!.layoutSignKey.visibility = View.VISIBLE
+            when (checkedId) {
+                R.id.rb_safety_measures_sign -> {
+                    binding!!.tvSignKey.text = getString(R.string.sign_key)
+                }
+
+                R.id.rb_safety_measures_rsa -> {
+                    binding!!.tvSignKey.text = getString(R.string.public_key)
+                }
+
+                R.id.rb_safety_measures_sm4 -> {
+                    binding!!.tvSignKey.text = getString(R.string.sm4_key)
+                }
+
+                else -> {
+                    binding!!.layoutSignKey.visibility = View.GONE
+                }
+            }
+        }
+
         binding!!.btnTest.setOnClickListener(this)
         binding!!.btnDel.setOnClickListener(this)
         binding!!.btnSave.setOnClickListener(this)
@@ -252,7 +300,13 @@ class WebhookFragment : BaseFragment<FragmentSendersWebhookBinding?>(), View.OnC
             R.id.rb_method_patch -> "PATCH"
             else -> "POST"
         }
-        val secret = binding!!.etSecret.text.toString().trim()
+        val safetyMeasure = when (binding!!.rgSafetyMeasures.checkedRadioButtonId) {
+            R.id.rb_safety_measures_sign -> 1
+            R.id.rb_safety_measures_rsa -> 2
+            R.id.rb_safety_measures_sm4 -> 3
+            else -> 0
+        }
+        val secret = binding!!.etSignKey.text.toString().trim()
         val response = binding!!.etResponse.text.toString().trim()
         val webParams = binding!!.etWebParams.text.toString().trim()
         val headers = getHeadersFromHeaderItemMap(headerItemMap)
@@ -276,7 +330,7 @@ class WebhookFragment : BaseFragment<FragmentSendersWebhookBinding?>(), View.OnC
             throw Exception(getString(R.string.invalid_username_or_password))
         }
 
-        return WebhookSetting(method, webServer, secret, response, webParams, headers, proxyType, proxyHost, proxyPort, proxyAuthenticator, proxyUsername, proxyPassword)
+        return WebhookSetting(safetyMeasure, method, webServer, secret, response, webParams, headers, proxyType, proxyHost, proxyPort, proxyAuthenticator, proxyUsername, proxyPassword)
     }
 
 

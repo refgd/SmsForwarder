@@ -474,7 +474,7 @@
     <string name="interval_label">递增间隔</string>
     <string name="timeout_label">单次超时</string>
     <string name="seconds">秒</string>
-    <string name="seconds_n">%s秒</string>
+    <string name="seconds_n">%d秒</string>
     <string name="retry_label">最多重试</string>
     <string name="test_sender_sms">【%s】恭喜您，该发送通道测试成功，请继续添加转发规则！</string>
     <string name="test_sender_name">测试通道</string>

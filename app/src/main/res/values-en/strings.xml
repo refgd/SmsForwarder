@@ -446,7 +446,7 @@
     <string name="interval_label">Increasing Interval</string>
     <string name="timeout_label">Single Timeout</string>
     <string name="seconds">secs</string>
-    <string name="seconds_n">%s sec</string>
+    <string name="seconds_n">%d sec</string>
     <string name="retry_label">Max Retries</string>
     <string name="test_sender_sms">[%s] Congratulations, the sender test is successful, please continue to add forwarding rules!</string>
     <string name="test_sender_name">Test Channel</string>
